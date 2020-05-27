@@ -30,7 +30,8 @@ if __name__ == '__main__':
     sim.exper.setScanPotentials(0.0, [-0.7], 0.0)
     sim.exper.setScanRate(1.0)
 
-    k_fs = np.logspace(-5.0, 9.0, num=10)
+    #k_fs = np.logspace(-5.0, 9.0, num=10)
+    k_fs= [1.0]
     E_pc = []
 
     cmap_conc = mpl.cm.get_cmap('nipy_spectral')

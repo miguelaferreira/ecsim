@@ -39,7 +39,8 @@ using Solver  = Eigen::SparseLU<Eigen::SparseMatrix<double>>;  //Turns out that 
 
 uint64_t getPosixClockTime();
 
-class Simulation {
+class Simulation
+{
 private:
     // objects that define the system, electrode, environment and experiment
     ostream &output_stream;
@@ -60,9 +61,13 @@ private:
     Solver sparseMatrixSolver; // solver that inverts the sparse matrixA using LU factorization
     Eigen::VectorXd vecb, vecx; // vectors, defininition see above
     vector<double> gridCoordinate, paramGammai, paramGamma2i;       // grid coordinates and expansion factor (and its ^2), pre-calculated for all points in grid
-    vector<double> independentTerms; // "independent terms" equals b, the right-hand side in Ax=b when solving for x
+    //vector<double> independentTerms; // "independent terms" equals b, the right-hand side in Ax=b when solving for x
+    Eigen::MatrixXd independentTerms; // "independent terms" equals b, the right-hand side in Ax=b when solving for x [species_index, grid_location]
     vector<double> coeffAlpha, coeffBeta, coeffBeta0; // coefficients for diffusion (alpha and beta) and current (beta0)
-    vector<double> gridConcentration, gridConcentrationPrevious; // current concentrations in grid for all species
+    
+    Eigen::MatrixXd gridConcentration, gridConcentrationPrevious; // current concentrations in grid for all species [species_index, grid_location]
+    
+    size_t numSpecies, numRedox, numReactions;
     size_t numGridPoints, numCurrentPoints = 5, numDerivPoints = 6; // number of points in grid, number of points for calculation of current, number of points for diffusion
     size_t numOneRow; // heavily used, as this is the number of species * the number of grid points (effectively, to store in a matrix in a vector)
 

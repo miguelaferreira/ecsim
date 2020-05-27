@@ -6,18 +6,7 @@ using namespace std;
 uint64_t getPosixClockTime()
 {
     struct timespec ts = {};
-    uint64_t elapsed_time_ns;
-
-    if (clock_gettime (CLOCK_MONOTONIC, &ts) == 0)
-    {
-        elapsed_time_ns = static_cast<uint64_t>(ts.tv_sec * 1e9 + ts.tv_nsec);
-    }
-    else
-    {
-        elapsed_time_ns = 0;
-    }
-
-    return elapsed_time_ns;
+    return (clock_gettime (CLOCK_MONOTONIC, &ts) == 0) ? static_cast<uint64_t>(ts.tv_sec * 1e9 + ts.tv_nsec) : 0;
 }
 
 /*===============================================================================================
@@ -147,7 +136,7 @@ void Simulation::storeConcentrations()
     {
         for (size_t x = 0; x < numGridPoints; x++)
         {
-            gridConcentrationPrevious[spec->getIndex()*numGridPoints+x] = gridConcentration[spec->getIndex()*numGridPoints+x];
+            gridConcentrationPrevious(spec->getIndex(), x) = gridConcentration(spec->getIndex(), x);
         }
     }
 }
@@ -173,14 +162,14 @@ void Simulation::updateKineticsInMatrix(bool add)
 
             if (add)
             {
-                matrixA.coeffRef( idx3, idx1 ) += rate * gridConcentration[spec2*numGridPoints+x];
-                matrixA.coeffRef( idx3, idx2 ) += rate * gridConcentration[spec1*numGridPoints+x];
-                independentTerms[spec3*numGridPoints+x] += rate * gridConcentration[spec1*numGridPoints+x] * gridConcentration[spec2*numGridPoints+x];
+                matrixA.coeffRef( idx3, idx1 ) += rate * gridConcentration(spec2, x);
+                matrixA.coeffRef( idx3, idx2 ) += rate * gridConcentration(spec1, x);
+                independentTerms(spec3, x) += rate * gridConcentration(spec1, x) * gridConcentration(spec2, x);
             }
             else
             {
-                matrixA.coeffRef( idx3, idx1 ) -= rate * gridConcentrationPrevious[spec2*numGridPoints+x];
-                matrixA.coeffRef( idx3, idx2 ) -= rate * gridConcentrationPrevious[spec1*numGridPoints+x];
+                matrixA.coeffRef( idx3, idx1 ) -= rate * gridConcentrationPrevious(spec2, x);
+                matrixA.coeffRef( idx3, idx2 ) -= rate * gridConcentrationPrevious(spec1, x);
             }
         }
     }
@@ -194,7 +183,7 @@ void Simulation::updateIndependentTerms()
     for (auto spec: sys.vecSpecies)
     {
         //Zero at matrix rows storing surface conditions
-        independentTerms[spec->getIndex()*numGridPoints] = 0;
+        independentTerms(spec->getIndex(), 0) = 0.0;
 
         for (size_t x = 1; x < numGridPoints; x++)
         {
@@ -202,13 +191,13 @@ void Simulation::updateIndependentTerms()
              * the system of equations is ('a' are coefficients, 'x(i,s)' the next concentrations at grid point i for species s):
              * a(-1)*x(i-1,s) + a(0)*x(i,s) + a(+1)*x(i+1,s) + a(+2)*x(i+2,s) + (etc.) = b(i,s)
              */
-            independentTerms[x+spec->getIndex()*numGridPoints] = -gridConcentration[x+numGridPoints*spec->getIndex()]*paramGamma2i[x]/paramLambda;
+            independentTerms(spec->getIndex(), x) = -gridConcentration(spec->getIndex(), x) * paramGamma2i[x]/paramLambda;
             // however, when i>numGridPoints, then x(i+i) reduces to the (never changing) bulk concentration and we add them into 'b', because they are now known:
             if (x >= EndNormal)
             {
                 for (int jj = 0; jj <= static_cast<int>(x - EndNormal); jj++)
                 {
-                    independentTerms[x+spec->getIndex()*numGridPoints] -= coeffMatrixN2(x, static_cast<int>(numDerivPoints)-jj-2, spec->getDiffNorm()) * spec->getConcNormEquil();
+                    independentTerms(spec->getIndex(), x) -= coeffMatrixN2(x, static_cast<int>(numDerivPoints)-jj-2, spec->getDiffNorm()) * spec->getConcNormEquil();
                 }
             }
         }
@@ -258,9 +247,16 @@ void Simulation::invertMatrix()
 {
     sparseMatrixSolver.factorize(matrixA);
 
-    for (size_t kk = 0; kk < numOneRow; kk++) vecb[static_cast<Eigen::Index>(kk)] = independentTerms[kk];
-    vecx = sparseMatrixSolver.solve(vecb);
-    for (size_t kk = 0; kk < numOneRow; kk++) gridConcentration[kk] = vecx[static_cast<Eigen::Index>(kk)];
+    for (auto spec: sys.vecSpecies)
+        for (size_t x = 0; x < numGridPoints; x++)
+            vecb[static_cast<Eigen::Index>( spec->getIndex()*numGridPoints+x )] = independentTerms(spec->getIndex(), x);
+        
+    // this is where the magic happens:
+    vecx = sparseMatrixSolver.solve(vecb);    
+    
+    for (auto spec: sys.vecSpecies)
+        for (size_t x = 0; x < numGridPoints; x++)
+            gridConcentration(spec->getIndex(), x) = vecx[static_cast<Eigen::Index>( spec->getIndex()*numGridPoints+x )];
 }
 
 double Simulation::calcCurrentFromFlux()
@@ -274,7 +270,7 @@ double Simulation::calcCurrentFromFlux()
         speciesflux = 0;
         for(size_t kk = 0; kk < numCurrentPoints; kk++)
         {
-            speciesflux += coeffBeta0[kk] * gridConcentration[spec->getIndex()*numGridPoints+kk];
+            speciesflux += coeffBeta0[kk] * gridConcentration(spec->getIndex(), kk);
         }
         currentContributionSpeciesFlux[static_cast<Eigen::Index>(spec->getIndex())] = speciesflux * spec->getDiffNorm();
     }
@@ -381,12 +377,15 @@ void Simulation::initParametersEtc()
     numGridPoints = 1;
     do { numGridPoints++; } while (deltaX < maxX * (paramGamma - 1.0) / ( pow(paramGamma, numGridPoints-1) - 1.0 ));
     numCurrentPoints = min(numCurrentPoints, numGridPoints); // truncate number of current points if it is larger than number of grid points
-    numOneRow = numGridPoints * sys.vecSpecies.size(); // == MyData.OneRow
-
+    numSpecies = sys.vecSpecies.size();
+    numRedox = sys.vecRedox.size();
+    numReactions = sys.vecReactions.size();
+    numOneRow = numGridPoints * numSpecies; // == MyData.OneRow
+    
     // output parametrisation of grid:
-    //output_stream << "Number of grid points = " << numGridPoints << "<br />" << endl;
-    //output_stream << "Number of current points = " << numCurrentPoints << endl;
-    //output_stream << "Number of deriv points = " << numDerivPoints << endl;
+    output_stream << "Number of grid points = " << numGridPoints << "<br />" << endl;
+    output_stream << "Number of current points = " << numCurrentPoints << endl;
+    output_stream << "Number of deriv points = " << numDerivPoints << endl;
 }
 
 void Simulation::initVectorsEtc()
@@ -398,8 +397,10 @@ void Simulation::initVectorsEtc()
     gridCoordinate.resize(numGridPoints);
     paramGammai.resize(numGridPoints);
     paramGamma2i.resize(numGridPoints);
-    gridConcentration.resize(numOneRow);
-    gridConcentrationPrevious.resize(numOneRow);
+    
+    gridConcentration = Eigen::MatrixXd(numSpecies, numGridPoints);
+    gridConcentrationPrevious = Eigen::MatrixXd::Zero(numSpecies, numGridPoints);
+    
     for (size_t x = 0; x < numGridPoints; x++)
     {
         paramGammai[x] = pow(paramGamma, x);
@@ -408,18 +409,17 @@ void Simulation::initVectorsEtc()
 
         for (auto spec: sys.vecSpecies)
         {
-            gridConcentration[spec->getIndex()*numGridPoints+x] = spec->getConcNormEquil();
-            gridConcentrationPrevious[spec->getIndex()*numGridPoints+x] = 0.0;
+            gridConcentration(spec->getIndex(), x) = spec->getConcNormEquil();
         }
     }
 
     // initialize independent terms and b & x vectors:
-    independentTerms.resize(numOneRow);
+    //independentTerms.resize(numOneRow);
+    independentTerms = Eigen::MatrixXd::Zero(numSpecies, numGridPoints);
     vecb.resize(static_cast<Eigen::Index>(numOneRow));
     vecx.resize(static_cast<Eigen::Index>(numOneRow));
     for (size_t n = 0; n < numOneRow; n++)
     {
-        independentTerms[n] = 0.0;
         vecb[static_cast<Eigen::Index>(n)] = 0.0;
         vecx[static_cast<Eigen::Index>(n)] = 0.0;
     }
@@ -441,13 +441,13 @@ void Simulation::initVectorsEtc()
 
     // initiliaze redox vectors & matrix:
     speciesInRedox.clear();
-    speciesInRedox.resize(sys.vecSpecies.size(), false);
+    speciesInRedox.resize(numSpecies, false);
     matrixB0DiagonalTerms.clear();
-    matrixB0DiagonalTerms.resize(sys.vecSpecies.size(), 0.0);
-    currentContributionMatrix.resize(static_cast<Eigen::Index>(sys.vecSpecies.size()), static_cast<Eigen::Index>(sys.vecRedox.size()));
+    matrixB0DiagonalTerms.resize(numSpecies, 0.0);
+    currentContributionMatrix.resize(static_cast<Eigen::Index>(numSpecies), static_cast<Eigen::Index>(numRedox));
     currentContributionMatrix.setZero();
-    currentContributionSpeciesFlux.resize(static_cast<Eigen::Index>(sys.vecSpecies.size()));
-    currentContributionRedoxFlux.resize(static_cast<Eigen::Index>(sys.vecRedox.size()));
+    currentContributionSpeciesFlux.resize(static_cast<Eigen::Index>(numSpecies));
+    currentContributionRedoxFlux.resize(static_cast<Eigen::Index>(numRedox));
 
     // initialize Triplet container
     tripletContainerMatrixA.clear();
