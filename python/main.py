@@ -13,7 +13,7 @@ import pyecsim as ecs
 
 if __name__ == '__main__':
 
-    sim = ecs.Simulation(False)  # bool verbosity
+    sim = ecs.Simulation(True)  # bool verbosity
 
     A = ecs.Species('A', 1.0, 1.0e-9)
     B = ecs.Species('B', 0.0, 1.0e-9)
@@ -30,8 +30,7 @@ if __name__ == '__main__':
     sim.exper.setScanPotentials(0.0, [-0.7], 0.0)
     sim.exper.setScanRate(1.0)
 
-    #k_fs = np.logspace(-5.0, 9.0, num=10)
-    k_fs= [1.0]
+    k_fs = np.logspace(-5.0, 9.0, num=10)
     E_pc = []
 
     cmap_conc = mpl.cm.get_cmap('nipy_spectral')

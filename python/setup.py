@@ -29,6 +29,7 @@ ext_modules = [
          '../source/electrodes.cpp',
          '../source/experiment.cpp',
          '../source/simulation.cpp',
+         '../source/matrixsystem.cpp',
          '../source/system.cpp'],
         include_dirs=[
             # Path to pybind11 headers

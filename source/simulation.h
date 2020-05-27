@@ -28,23 +28,21 @@ const double CONST_PI = 3.14159265358979323846;
 const double CONST_F = 96485.33212;
 const double CONST_R = 8.31446261815324;
 
-using Triplet = Eigen::Triplet<double>; //triplets (row, column, value) to fill sparse matrix
-using Solver  = Eigen::SparseLU<Eigen::SparseMatrix<double>>;  //Turns out that SparseLU is actually fast enough, but only when running as Release :)
-
 #include "coefs_alpha_beta.h"
 #include "electrodes.h"
 #include "system.h"
 #include "environment.h"
 #include "experiment.h"
+#include "matrixsystem.h"
 
 uint64_t getPosixClockTime();
 
 class Simulation
 {
 private:
-    // objects that define the system, electrode, environment and experiment
     ostream &output_stream;
-
+    MatrixSystem msys;
+    
     double f; // F/RT
     double totalTime, totalTheta, deltaTheta = 0.2, sigma;
 
@@ -55,22 +53,14 @@ private:
     double minLogRate = 3.0, maxLogRate = 7.0;
     double paramLambda; // dimensionless kinetic parameter of the system
 
-    vector<Triplet> tripletContainerMatrixA; // this container holds (row, col, value) triplets before matrixA is assembled
-    Eigen::SparseMatrix<double> matrixA; // matrix to be inverted: Ax=b corresponds to matrixA * vecx = vecb
-    bool matrixPatternAnalyzed;
-    Solver sparseMatrixSolver; // solver that inverts the sparse matrixA using LU factorization
-    Eigen::VectorXd vecb, vecx; // vectors, defininition see above
-    vector<double> gridCoordinate, paramGammai, paramGamma2i;       // grid coordinates and expansion factor (and its ^2), pre-calculated for all points in grid
-    //vector<double> independentTerms; // "independent terms" equals b, the right-hand side in Ax=b when solving for x
-    Eigen::MatrixXd independentTerms; // "independent terms" equals b, the right-hand side in Ax=b when solving for x [species_index, grid_location]
-    vector<double> coeffAlpha, coeffBeta, coeffBeta0; // coefficients for diffusion (alpha and beta) and current (beta0)
-    
-    Eigen::MatrixXd gridConcentration, gridConcentrationPrevious; // current concentrations in grid for all species [species_index, grid_location]
-    
     size_t numSpecies, numRedox, numReactions;
     size_t numGridPoints, numCurrentPoints = 5, numDerivPoints = 6; // number of points in grid, number of points for calculation of current, number of points for diffusion
-    size_t numOneRow; // heavily used, as this is the number of species * the number of grid points (effectively, to store in a matrix in a vector)
 
+    vector<double> gridCoordinate, paramGammai, paramGamma2i; // grid coordinates and expansion factor (and its ^2), pre-calculated for all points in grid
+    vector<double> coeffAlpha, coeffBeta, coeffBeta0; // coefficients for diffusion (alpha and beta) and current (beta0)
+    Eigen::MatrixXd independentTerms; // "independent terms" equals b, the right-hand side in Ax=b when solving for x [species_index, grid_location]
+    Eigen::MatrixXd gridConcentration, gridConcentrationPrevious; // current concentrations in grid for all species [species_index, grid_location]
+    
     // matrix that stores the 2nd order kinetic interactions (needed for Laasonen linearization)
     // secondOrderKinetics[] = {A, B, C, normalized_rate} for the 2nd order reaction A+B<->C
     vector<tuple<size_t, size_t, size_t, double>> secondOrderKinetics;
@@ -97,6 +87,7 @@ public:
     void setDifferentialOrders(size_t _numcurr, size_t _numderiv) { numCurrentPoints = _numcurr; numDerivPoints = _numderiv; }
 
     size_t run(vector<double>&, vector<double>&);
+    
 private:
     size_t runSimulation(vector<double>&, vector<double>&);
     void scanSegment(double, double, bool, vector<double>&, vector<double>&);
@@ -115,12 +106,11 @@ private:
     void addRedoxToMatrix();
     void addBICoeffsToMatrix();
     void addKineticsToMatrix();
-    void addFirstOrderKineticTerm(size_t, size_t, double);
-    void addSecondOrderKineticTerm(size_t, size_t, size_t, double);
+    void addHalfReactionKineticsToMatrix(Species*, Species*, Species*, Species*, double);
+    void addFirstOrderKineticTerm(Species*, Species*, double);
+    void addSecondOrderKineticTerm(Species*, Species*, Species*, double);
 
     double coeffMatrixN2(size_t, int, double);
-    void addToMatrix(size_t, size_t, double);
-    void createMatrix();
 };
 
 #endif // SIMULATION_H
