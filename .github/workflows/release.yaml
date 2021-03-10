@@ -30,7 +30,7 @@ jobs:
           # This step is required because docker buildx build outputs are not working well.
           # With buildx build outputs we could ask the docker engine to give us back the files
           # but that hangs the build.
-          docker run --rm -v ${PWD}:/repo ${{ steps.docker-build.outputs.digest }} cp -rf build-output /repo
+          docker run --rm -v ${PWD}:/repo ${{ steps.docker-build.outputs.digest }} cp -rf /build-output /repo
       - name: 'Generate changelog'
         id: changelog
         uses: metcalfc/changelog-generator@v0.4.4
