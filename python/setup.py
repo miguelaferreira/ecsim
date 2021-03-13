@@ -101,6 +101,7 @@ class BuildExt(build_ext):
             opts.append('/DVERSION_INFO=\\"%s\\"' % self.distribution.get_version())
             if os.getenv('CI') is not None: # in github actions
                 opts.append('/DCMAKE_TOOLCHAIN_FILE=\\"%s/scripts/buildsystems/vcpkg.cmake\\"' % os.getenv('VCPKG_INSTALLATION_ROOT'))
+                opts.append('-I%s/packages/eigen3_x64-windows/include' % os.getenv('VCPKG_INSTALLATION_ROOT'))
         for ext in self.extensions:
             ext.extra_compile_args = opts
             ext.extra_link_args = link_opts
