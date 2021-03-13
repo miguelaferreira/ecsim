@@ -8,7 +8,7 @@ on:
 jobs:
   build_windows:
     runs-on: windows-latest
-    name: 'Build release for Windows'
+    name: 'Build Windows release'
     strategy:
       matrix:
         python-version: [ '3.5', '3.6', '3.7', '3.8' ]
@@ -22,6 +22,7 @@ jobs:
       - name: 'Build with Python ${{ matrix.python-version }}'
         run: |
           cd python
+          pip install wheel
           python setup.py bdist_wheel
       - name: 'Upload Windows artifacts'
         uses: actions/upload-artifact@v2
@@ -32,7 +33,7 @@ jobs:
 
 #  build_linux:
 #    runs-on: ubuntu-latest
-#    name: 'Build release for Linux'
+#    name: 'Build Linux release (all versions)'
 #    steps:
 #      - name: 'Checkout code'
 #        uses: actions/checkout@v2
