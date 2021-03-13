@@ -10,8 +10,10 @@ jobs:
     runs-on: windows-latest
     name: 'Build Windows release'
     strategy:
+      fail-fast: false
       matrix:
-        python-version: [ '3.5', '3.6', '3.7', '3.8' ]
+        python-version: [ '3.5' ]
+#        python-version: [ '3.5', '3.6', '3.7', '3.8' ]
     steps:
       - name: 'Checkout code'
         uses: actions/checkout@v2
@@ -19,6 +21,9 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+      - name: 'Install C++ dependencies'
+        run: |
+          vcpkg install eigen3:x64-windows --recurse
       - name: 'Build with Python ${{ matrix.python-version }}'
         run: |
           cd python
@@ -27,7 +32,7 @@ jobs:
       - name: 'Upload Windows artifacts'
         uses: actions/upload-artifact@v2
         with:
-          name: python-wheels-windows
+          name: python-wheels-windows-${{ matrix.python-version }}
           path: |
             build-output/*
 
